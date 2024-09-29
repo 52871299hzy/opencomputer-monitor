@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<link href="/static/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+	<script src="/static/js/bootstrap.bundle.min.js" integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
+    <title>TPS info</title>
+    <script>
+        let dims = [];
+        function sumof(obj) {
+            let sum = 0;
+            if(obj === undefined || obj === null) return 0;
+            for (const [key, value] of Object.entries(obj)) {
+                sum += value;
+            }
+            return sum;
+        }
+        function show_detail(dim, type) {
+            console.log(dim, type);
+            const tbody = document.getElementById('table-details');
+            const title = document.getElementById('detail-title');
+            title.innerText = `维度 ${dim} 的 ${type} 信息`;
+            tbody.innerHTML = `
+                <thead>
+                    <tr>
+                        <th>名称</th>
+                        <th>数量</th>
+                    </tr>
+                </thead>
+            `;
+            const data = dims.find(item => item.id === dim);
+            const obj = data[type];
+            
+            for (const [key, value] of Object.entries(obj).sort((a, b) => b[1] - a[1])) {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${key}</td>
+                    <td>${value}</td>
+                `;
+                tbody.appendChild(tr);
+            }
+        }
+        fetch('/tps').then(res => res.json()).then(data => {
+            const tbody = document.getElementById('tbody');
+            document.getElementById('time').innerText = new Date(data.time*1000).toLocaleString();
+            data = data.tps
+            const tr = document.createElement('tr');
+            const overall = data.overall
+            tr.innerHTML = `
+                <td>总计</td>
+                <td>${overall.ticktime}</td>
+                <td>${overall.chunk}</td>
+                <td>${overall.entity}</td>
+                <td>${overall.te}</td>
+            `;
+            tr.classList.add('table-primary');
+            tbody.appendChild(tr);
+            dims = data.dims;
+            data.dims.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${item.id}</td>
+                    <td>${item.tt}</td>
+                    <td>${item.chunk}</td>
+                    <td><a href="javascript:show_detail(${item.id},'entity');">${sumof(item.entity)}</a></td>
+                    <td><a href="javascript:show_detail(${item.id},'te');">${sumof(item.te)}</a></td>
+                `;
+                tbody.appendChild(tr);
+            });
+        });
+    </script>
+</head>
+<body>
+	<div class="container-fluid">
+		<a href="index.html">回首页</a>
+		<div class="row">
+			<div class="col">
+                <h1>
+                    TPS 信息
+                </h1>
+                <p> 
+                    更新时间: <span id="time"></span>
+                </p>
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>维度ID</th>
+                            <th>mspt</th>
+                            <th>加载区块数</th>
+                            <th>加载实体数</th>
+                            <th>加载TE数</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbody">
+
+                    </tbody>
+                </table>
+            </div>
+            <div class="col">
+                <p id="detail-title"></p>
+                <table class="table" id="table-details">
+
+                </table>
+            </div>
+        </div>
+    </div>
+</body>

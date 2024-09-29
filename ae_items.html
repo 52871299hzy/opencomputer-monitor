@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<script src="/static/js/fflate@0.8.0"></script>
+	<script src="/static/js/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+	<link href="/static/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+	<script src="/static/js/bootstrap.bundle.min.js" integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
+	<!-- <script src="https://cdn.jsdelivr.net/npm/babel-plugin-transform-redom-jsx@3.0.5/lib/index.js" type="module" crossorigin="anonymous"></script> -->
+	<script src="/static/js/redom.min.js"></script>
+	<script src="/static/js/babel.min.js"></script>
+	<script src="/static/js/nbt.js"></script>
+	<title>AE Items</title>
+	<style>
+		.cpu-item-pending {
+			background-color: #e8e5ca;
+		}
+		.cpu-item-active {
+			background-color: #a6c699;
+		}
+		.cpu-item-normal {
+			background-color: var(--bs-card-bg);
+		}
+		.item-craftable {
+			background-color: greenyellow;
+			cursor: pointer;
+		}
+	</style>
+	<script type="text/babel">
+		const { el, mount } = redom
+		const React = {
+			createElement: el
+		}
+		function item_icon_name(item) {
+			return 'itempanel_icons/' + (`${item.name}___${item.damage}.png`).replaceAll('|', '_')
+		}
+		function extract_item(item) {
+			return {
+				name: item.name,
+				damage: item.damage,
+				label: item.label
+			}
+		}
+		function notation(num) {
+			if (num >= 1e18) {
+				return (num/1e18).toPrecision(3) + 'E';
+			}else if(num >=1e15) {
+				return (num/1e15).toPrecision(3) + 'P';
+			}else if(num >=1e12) {
+				return (num/1e12).toPrecision(3) + 'T';
+			}else if(num >=1e9) {
+				return (num/1e9).toPrecision(3) + 'G';
+			}else if(num >=1e6) {
+				return (num/1e6).toPrecision(3) + 'M';
+			}else if(num >=1e4) {
+				return (num/1e3).toPrecision(3) + 'K';
+			}
+			return String(num);
+		}
+		function ItemRow(i, item) {
+			return (
+				<div class={"col-lg-3 border " + (item.isCraftable?"item-craftable":"")} onClick={item.isCraftable?`order(${i})`:''}>
+					<table width="100%">
+						<tr>
+							<td width="66px">
+								<img src={item_icon_name(item)} />
+							</td>
+							<td>
+								<span title={item.name + '/' + item.damage}>{item.label}</span><br />
+								{notation(item.size)}<br />
+								{item.hasTag&&(
+									<span title={JSON.stringify(nbt.parse(new Uint8Array(item.tag)))}>
+										<u>(+NBT)</u>
+									</span>
+								)}
+							</td>
+						</tr>
+					</table>
+				</div>
+			)
+		}
+		function build_item_row(t, i, item) {
+			mount(document.getElementById(t), ItemRow(i, item))
+		}
+		function CpuRow(item, amounts) {
+			return (
+				<div class={"col-lg-4 border " + (amounts.active?"cpu-item-active":(amounts.pending?"cpu-item-pending":"cpu-item-normal"))}>
+					<table width="100%">
+						<tr>
+							<td width="66px">
+								<img src={item_icon_name(item)} />
+							</td>
+							<td style='white-space: pre-line;'>
+								{item.label}
+								{item.size?`\n数量: ${item.size}`:''}
+								{amounts.active?`\n正在合成: ${amounts.active}`:''}
+								{amounts.pending?`\n等待合成: ${amounts.pending}`:''}
+								{amounts.stored?`\n现存: ${amounts.stored}`:''}
+							</td>
+						</tr>
+					</table>
+				</div>
+			)
+		}
+		function build_cpu_row(t, item, amounts) {
+			mount(document.getElementById(t), CpuRow(item, amounts))
+		}
+		function build_cpu_table(t, i, cpu) {
+			mount(document.getElementById(t), (
+			<div class="card">
+				<div class="card-header" data-bs-toggle="collapse" href={"#collapse-" + i} role="button">
+				CPU #{i} - {cpu.name||"未命名"} - 并行: {notation(cpu.coprocessors)} 存储: {notation(cpu.storage)} 正忙: {cpu.busy?'是':'否'}
+				</div>
+				
+				<div id={"collapse-" + i} class="collapse show">
+					{cpu.finalOutput && (
+						<p id={'final-'+i}>
+							合成目标：
+							{CpuRow(cpu.finalOutput, {})}
+						</p>
+					)}
+					<div class="card-body row" id={"cpu-" + i}>
+					</div>
+				</div>
+			</div>
+			))
+			let cpu_items = {};
+			if(cpu.activeItems)
+				for(let j = 0; j< cpu.activeItems.length;j++){
+					if(cpu.activeItems[j].size <= 0) continue;
+					let t = extract_item(cpu.activeItems[j]);
+					if(!cpu_items[JSON.stringify(t)]){
+						cpu_items[JSON.stringify(t)]={};
+					}
+					if(cpu.activeItems[j].size > 0){
+						cpu_items[JSON.stringify(t)].active=cpu.activeItems[j].size;
+					}
+				}
+			if(cpu.pendingItems)
+				for(let j = 0; j< cpu.pendingItems.length;j++){
+					if(cpu.pendingItems[j].size <= 0) continue;
+					let t = extract_item(cpu.pendingItems[j]);
+					if(!cpu_items[JSON.stringify(t)]){
+						cpu_items[JSON.stringify(t)]={};
+					}
+					if(cpu.pendingItems[j].size > 0){
+						cpu_items[JSON.stringify(t)].pending=cpu.pendingItems[j].size;
+					}
+				}
+			if(cpu.storedItems)
+				for(let j = 0; j< cpu.storedItems.length;j++){
+					if(cpu.storedItems[j].size <= 0) continue;
+					let t = extract_item(cpu.storedItems[j]);
+					if(!cpu_items[JSON.stringify(t)]){
+						cpu_items[JSON.stringify(t)]={};
+					}
+					if(cpu.storedItems[j].size > 0){
+						cpu_items[JSON.stringify(t)].stored=cpu.storedItems[j].size;
+					}
+				}
+			console.log(cpu_items);
+			for(let j in cpu_items){
+				build_cpu_row(`cpu-${i}`, JSON.parse(j), cpu_items[j]);
+			}
+		}
+		var items;
+		var disp_items;
+		var order = index => {
+			console.log("Ordering: " + index);
+			const item = disp_items[index];
+			let cnt = prompt(`正在下单${item.label}，请输入下单数量`)
+			if(cnt){
+				cnt = parseInt(cnt)
+				fetch('/ae/order', {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json'
+					},
+					body: JSON.stringify({
+						item: item,
+						amount: cnt
+					})
+				}).then(response => {
+					if(response.status == 200) {
+						alert('下单成功')
+					} else {
+						alert('下单失败')
+					}
+					return response.json()
+				})
+				.then(json => {
+					console.log(json)
+				})
+			}
+		}
+		function update_items() {
+			fetch('/ae/items')
+				.then(response => response.json())
+				.then(json => {
+					items = json.items;
+					local_update_items();
+					document.getElementById('item-updated').innerText = new Date(json.time*1000).toLocaleString();
+				})
+				.catch(err => console.log('Request Failed', err));
+		}
+		function update_cpus() {
+			fetch('/ae/cpus')
+				.then(response => response.json())
+				.then(json => {
+					//clear cpu container
+					document.getElementById('cpu-container').innerHTML='';
+					var cpus = json.cpus;
+					for (let i = 0; i < cpus.length; i++) {
+						build_cpu_table('cpu-container', i,cpus[i]);
+					}
+					document.getElementById('cpu-updated').innerText = new Date(json.time*1000).toLocaleString();
+				})
+				.catch(err => console.log('Request Failed', err));
+		}
+		function match(item, str) {
+			str = str.split(/\s+/);
+			for (const term of str) {
+				if(term[0] == '@') {
+					if(!item.name.split(':')[0].startsWith(term.substr(1))){
+						return false;
+					}
+				} else {
+					if(item.label.search(new RegExp(term, 'i')) == -1) {
+						return false;
+					}
+				}
+			}
+			return true;
+		}
+		function local_update_items() {
+			document.getElementById('main-table').innerHTML='';
+			const search = document.getElementById('search').value;
+			disp_items = items.filter((item) => match(item, search));
+			const sort = document.getElementById('sort-select').value;
+			if(sort === '1') {
+				disp_items.sort((a, b) => b.size - a.size);
+			}else if(sort === '2') {
+				disp_items.sort((a, b) => a.size - b.size);
+			}else if(sort === '3') {
+				disp_items.sort((a, b) => a.label.localeCompare(b.label));
+			}
+			for (let i = 0; i < disp_items.length; i++) {
+				build_item_row('main-table', i,disp_items[i]);
+			}
+		}
+		function set_secret() {
+			document.cookie = `secret=${document.getElementById('secret').value};path=/`;
+			location.reload();
+		}
+		update_cpus();
+		update_items();
+	</script>
+</head>
+<body>
+	<div class="container-fluid">
+		<a href="index.html" id="top">回首页</a>
+		<a href="ae_orders.html">订单信息</a>
+		<a href="#section-cpu">跳转到CPU</a>
+		<!-- a back to top button, always on bottom left-->
+		<a href="#top" style="position: fixed; right: 1%; bottom: 5%; z-index: 1024;">回到顶部</a>
+		密码：<input id="secret" /><button onclick="set_secret()">设置</button>
+		<div class="row">
+			<div class="col">
+				网络内物品：
+				<button onclick="update_items()">刷新</button>
+				更新时间：<span id="item-updated"></span>
+				<br>
+				<select id="sort-select" onchange="local_update_items()">
+					<option selected value="0">不排序</option>
+					<option value="1">数量降序</option>
+					<option value="2">数量升序</option>
+					<option value="3">名称升序</option>
+				</select>
+				搜索<span title="@搜索模组id, 其他关键词作为正则匹配物品名称，无顺序要求"><u>(?)</u></span>:
+				<input id="search" oninput="local_update_items()"/>
+				<div id="main-table" class="row">
+					
+				</div>
+			</div>
+			<div class="col" id="section-cpu">
+				CPU:
+				<button onclick="update_cpus()">刷新</button>
+				更新时间：<span id="cpu-updated"></span>
+				<div id="cpu-container">
+					
+				</div>
+			</div>
+		</div>
+	</div>
+</body>
+</html>
